@@ -1,0 +1,47 @@
+  name: 'Trigger Jenkins job with parameters'
+  description: 'Trigger a Jenkins job with parameters and optionally wait for its result.'
+  branding:
+      icon: "check"
+      color: orange
+  inputs:
+      jenkins_job_name:
+        description: 'Jenkins job name'
+        required: true
+      jenkins_base_url:
+          description: 'Jenkins URL'
+          required: true
+      jenkins_user:
+          description: 'Jenkins user'
+          required: true
+      jenkins_password:
+          description: 'Jenkins password'
+          required: true
+      jenkins_job_parameters:
+        description: 'Jenkins job parameters'
+        required: false
+      wait_for_result:
+        description: 'Wait for result'
+        required: false
+        default: 'True'
+      polling_interval:
+        description: 'Interval to poll for result'
+        required: false
+        default: '45'
+      polling_timeout:
+        description: 'Timeout for polling for result in seconds'
+        required: false
+        default: '3600'
+
+
+  runs:
+      image: "scylladb/github-actions:jenkins-client:v0.1.0"
+      using: "docker"
+      args:
+          - ${{ inputs.jenkins_job_name }}
+          - ${{ inputs.jenkins_job_parameters }}
+          - ${{ inputs.wait_for_result }}
+          - ${{ inputs.polling_interval }}
+          - ${{ inputs.polling_timeout }}
+          - --jenkins_base_url=${{ inputs.jenkins_base_url }}
+          - --jenkins_user=${{ inputs.jenkins_user }}
+          - --jenkins_password=${{ inputs.jenkins_password }}
