@@ -15,10 +15,10 @@ install-golangci-lint-if-needed:
 
 .PHONY: check
 check: install-golangci-lint-if-needed
-	@golangci-lint run
+	@${BIN_DIR}/golangci-lint run
 
 fix: install-golangci-lint-if-needed
-	@golangci-lint run --fix
+	@${BIN_DIR}/golangci-lint run --fix
 
 build-binary:
 	@mkdir build >/dev/null 2>&1 || true

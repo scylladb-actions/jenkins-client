@@ -1,47 +1,41 @@
-  name: 'Trigger Jenkins job with parameters'
-  description: 'Trigger a Jenkins job with parameters and optionally wait for its result.'
+  name: 'Golang Jenkins Client'
+  description: 'Trigger a Jenkins job, wait for its result, have jenkins output in githubactions.'
   branding:
       icon: "check"
       color: orange
   inputs:
-      jenkins_job_name:
+      base_url:
+          description: 'Jenkins server URL'
+          required: true
+      job_name:
         description: 'Jenkins job name'
         required: true
-      jenkins_base_url:
-          description: 'Jenkins URL'
-          required: true
-      jenkins_user:
+      user:
           description: 'Jenkins user'
           required: true
-      jenkins_password:
-          description: 'Jenkins password'
+      password:
+          description: 'Jenkins user password'
           required: true
-      jenkins_job_parameters:
+      job_parameters:
         description: 'Jenkins job parameters'
         required: false
-      wait_for_result:
-        description: 'Wait for result'
+      wait_timeout:
+        description: 'Wait timeout'
         required: false
-        default: 'True'
+        default: 1h
       polling_interval:
         description: 'Interval to poll for result'
         required: false
-        default: '45'
-      polling_timeout:
-        description: 'Timeout for polling for result in seconds'
-        required: false
-        default: '3600'
-
+        default: 1s
 
   runs:
-      image: "scylladb/github-actions:jenkins-client:v0.1.0"
+      image: "docker://scylladb/github-actions:jenkins-client-v0.1.0"
       using: "docker"
       args:
-          - ${{ inputs.jenkins_job_name }}
-          - ${{ inputs.jenkins_job_parameters }}
-          - ${{ inputs.wait_for_result }}
-          - ${{ inputs.polling_interval }}
-          - ${{ inputs.polling_timeout }}
-          - --jenkins_base_url=${{ inputs.jenkins_base_url }}
-          - --jenkins_user=${{ inputs.jenkins_user }}
-          - --jenkins_password=${{ inputs.jenkins_password }}
+          - --job-name=${{ inputs.job_name }}
+          - --job-parameters=${{ inputs.job_parameters }}
+          - --wait-timeout=${{ inputs.wait_timeout }}
+          - --wait-pooling-interval=${{ inputs.polling_interval }}
+          - --base-url=${{ inputs.base_url }}
+          - --user=${{ inputs.user }}
+          - --password=${{ inputs.password }}

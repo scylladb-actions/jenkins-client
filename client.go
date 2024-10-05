@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -190,46 +192,28 @@ func execute(
 	buildID int64,
 	waitTimeout, poolingInterval time.Duration,
 ) error {
+	// Disable SSL verification
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+
 	jenkins := gojenkins.CreateJenkins(nil, baseURL, user, password)
 	_, err := jenkins.Init(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "Failed to initialize jenkins client")
 	}
 
-	job, err := jenkins.GetJob(ctx, jobName)
-	if err != nil {
-		return errors.Wrapf(err, "Failed to get job %s", jobName)
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, waitTimeout)
-	defer cancel()
 	var build *gojenkins.Build
-	if buildID == 0 {
-		parsedJobParameters := map[string]string{}
-		if jobParameters != "" {
-			err = json.Unmarshal([]byte(jobParameters), &parsedJobParameters)
-			if err != nil {
-				return errors.Wrapf(err, "Failed to parse job parameters")
-			}
-		}
-
-		queueID, err := job.InvokeSimple(ctx, parsedJobParameters) // or  jenkins.BuildJob(ctx, "#jobname", params)
+	if buildID != 0 {
+		build, err = getCurrentBuild(ctx, jenkins, jobName, buildID)
 		if err != nil {
-			return errors.Wrapf(err, "Failed to invoke job %s", jobName)
+			return err
 		}
-
-		fmt.Fprintf(os.Stdout, "Job %s is queued with id %d, waiting for working to pick it up\n", jobName, queueID)
-		build, err = waitForJobToBePickedUp(ctx, jenkins, poolingInterval, queueID)
-		if err != nil {
-			return errors.Wrapf(err, "Failed to wait for job to be picked up")
-		}
-		fmt.Fprintf(os.Stdout, "Job %s is running with build id %d\n", jobName, build.Raw.Number)
 	} else {
-		build, err = job.GetBuild(ctx, buildID)
+		ctx, cancel := context.WithTimeout(ctx, waitTimeout)
+		defer cancel()
+		build, err = startNewBuild(ctx, jenkins, jobName, jobParameters, poolingInterval)
 		if err != nil {
-			return errors.Wrapf(err, "failed to get build %d", buildID)
+			return err
 		}
-		fmt.Fprintf(os.Stdout, "Job %s with build id %d is found\n", jobName, build.Raw.Number)
 	}
 
 	err = waitBuildToComplete(ctx, os.Stdout, os.Stderr, poolingInterval, build)
@@ -242,6 +226,75 @@ func execute(
 		return nil
 	}
 	return errors.Errorf("Job %s failed, URL: %s", jobName, build.GetUrl())
+}
+
+func getCurrentBuild(
+	ctx context.Context,
+	jenkins *gojenkins.Jenkins,
+	jobName string,
+	buildID int64,
+) (*gojenkins.Build, error) {
+	job, err := jenkins.GetJob(ctx, jobName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "Failed to get job %s", jobName)
+	}
+
+	build, err := job.GetBuild(ctx, buildID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get build %d", buildID)
+	}
+
+	fmt.Fprintf(os.Stdout, "Job %s with build id %d is found\n", jobName, build.Raw.Number)
+	return build, nil
+}
+
+func startNewBuild(
+	ctx context.Context,
+	jenkins *gojenkins.Jenkins,
+	jobName string,
+	jobParameters string,
+	poolingInterval time.Duration,
+) (*gojenkins.Build, error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, errors.Wrapf(ctx.Err(), "Timeout reached on waiting for job to be picked up")
+		default:
+		}
+
+		job, err := jenkins.GetJob(ctx, jobName)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to get job %s", jobName)
+		}
+
+		parsedJobParameters := map[string]string{}
+		if jobParameters != "" {
+			err = json.Unmarshal([]byte(jobParameters), &parsedJobParameters)
+			if err != nil {
+				return nil, errors.Wrapf(err, "Failed to parse job parameters")
+			}
+		}
+
+		queueID, err := job.InvokeSimple(ctx, parsedJobParameters) // or  jenkins.BuildJob(ctx, "#jobname", params)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to invoke job %s", jobName)
+		}
+
+		if queueID == 0 {
+			// Job runner is already reused, need to acquire a new one
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		fmt.Fprintf(os.Stdout, "Job %s is queued with id %d, waiting for working to pick it up\n", jobName, queueID)
+		build, err := waitForJobToBePickedUp(ctx, jenkins, poolingInterval, queueID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to wait for job to be picked up")
+		}
+
+		fmt.Fprintf(os.Stdout, "Job %s is running with build id %d\n", jobName, build.Raw.Number)
+		return build, nil
+	}
 }
 
 func main() {
@@ -271,7 +324,7 @@ func main() {
 	waitTimeout := flag.Duration(
 		"wait-timeout",
 		getDurationFromEnv("JENKINS_WAIT_TIMEOUT", -1),
-		"A waiting timeout. -1 - Wait indefinitely, 0 - do not wait. Default is 0. Example: my_folder/my_job")
+		"A waiting timeout. Default - Wait indefinitely, 0 - do not wait. Default is 0. Example: my_folder/my_job")
 	waitPoolingInterval := flag.Duration(
 		"wait-pooling-interval",
 		getDurationFromEnv("JENKINS_WAIT_POOLING_INTERVAL", 500*time.Millisecond),

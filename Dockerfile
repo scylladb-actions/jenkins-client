@@ -1,5 +1,8 @@
 FROM scratch
 
+ARG COMMIT_SHA
+ARG REPO_URL
+
 WORKDIR /
 
 COPY jenkins-client /

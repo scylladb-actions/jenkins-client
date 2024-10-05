@@ -1,6 +1,6 @@
 issues:
   new: true
-  new-from-rev: origin/master
+  new-from-rev: origin/main
 linters:
   disable-all: true
   enable:

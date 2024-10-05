@@ -1,3 +1,4 @@
+version: 2
 env:
   - GO111MODULE=on
 before:
@@ -14,20 +15,12 @@ builds:
       - amd64
       - arm
       - arm64
-      - i386
     goamd64:
       - v3
-archive:
-  replacements:
-    darwin: Darwin
-    linux: Linux
-    windows: Windows
-    386: i386
-    amd64: x86_64
 checksum:
   name_template: 'checksums.txt'
 snapshot:
-  name_template: "{{ .Tag }}-next"
+  version_template: "{{ .Tag }}-next"
 changelog:
   sort: asc
   filters:
@@ -36,6 +29,26 @@ changelog:
       - '^test:'
 
 dockers:
-  build_flag_templates:
-    - "--build-arg COMMIT_SHA={{ .Commit }}"
-    - "--build-arg REPO_URL={{ .RepoURL }}"
+  - image_templates:
+      - scylladb/github-actions:jenkins-client-v{{ .Version }}-amd64
+    goarch: amd64
+    goamd64: v3
+    goos: linux
+    id: gemini-amd64
+    build_flag_templates:
+      - --platform=linux/amd64
+
+  - image_templates:
+      - scylladb/github-actions:jenkins-client-v{{ .Version }}-arm64v8
+    goarch: arm64
+    id: gemini-arm
+    goos: linux
+    build_flag_templates:
+      - --platform=linux/arm64/v8
+
+docker_manifests:
+  - name_template: 'scylladb/github-actions:jenkins-client-v{{ .Version }}'
+    skip_push: false
+    image_templates:
+      - 'scylladb/github-actions:jenkins-client-v{{ .Version }}-amd64'
+      - 'scylladb/github-actions:jenkins-client-v{{ .Version }}-arm64v8'
