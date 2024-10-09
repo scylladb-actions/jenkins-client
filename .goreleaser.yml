@@ -46,6 +46,25 @@ dockers:
     build_flag_templates:
       - --platform=linux/arm64/v8
 
+archives:
+  - id: jenkins-client
+    format: tar.gz
+    files:
+      - README.md
+      - action.yaml
+      - build/jenkins-client # Adjust based on your action's entrypoint
+      - Dockerfile
+
+# GitHub Releases configuration
+release:
+  github:
+    owner: dkropachev
+    name: scylladb-actions/jenkins-client
+  id: github
+  draft: false
+  prerelease: false
+  disable: false
+
 docker_manifests:
   - name_template: 'scylladb/github-actions:jenkins-client-v{{ .Version }}'
     skip_push: false
